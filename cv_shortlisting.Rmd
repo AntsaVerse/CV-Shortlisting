@@ -1,0 +1,218 @@
+---
+title: "JAO shortlisting"
+author: "Antsa RAJAONAH"
+date: "2025-01-14"
+output: 
+  rmarkdown::html_document:
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(plotly)
+library(readxl)
+library(writexl)
+```
+
+## Charger les données
+
+Importer les réponses Kobo :
+
+```{r load_data}
+path<-getwd()
+database<-paste0(path,"/input/data/JAO_vetting_data_template.xlsx")
+
+candidats <- read_excel(database)
+```
+
+## Attribuer des scores
+
+Les scores sont définis pour chaque variable :
+
+```{r scoring}
+candidats <- candidats %>%
+  mutate(
+    # Diplôme (sur 2)
+    score_diplome = case_when(
+      niveau == "phd" ~ 3,
+      niveau == "master" ~ 2,
+      niveau == "licence_pro" ~ 1,
+      niveau == "licence" ~ 1,
+      TRUE ~ 0
+    ),
+
+    # Expériences (sur 5)
+    score_exp_meal = ifelse(exp_meal == "yes", 2, 0),
+    score_exp_recherche = ifelse(exp_recherche == "yes", 3, 0),
+
+    # Compétences logicielles (sur 3)
+    score_skills_indesign=skills.indesign*2,
+    score_skills_powerpoint=skills.powerpoint*2,
+    score_skills_excel=skills.excel*2,
+    score_skills_statsoft=skills.stat_soft*1,
+    score_skills_sig=skills.sig*1,
+    score_skills_pbi=skills.power_bi*1,
+    score_skills=(score_skills_indesign+score_skills_powerpoint+score_skills_excel+score_skills_statsoft+score_skills_sig+score_skills_pbi)*(1/3),
+
+    # Capacités (sur 6)
+    score_analyse = ifelse(capacite_analyse == "yes", 3, 0),
+    score_redaction = ifelse(capacite_redaction == "yes", 3, 0),
+
+    # Langues (Français obligatoire) (sur 2)
+    score_language =language.french+language.english,
+
+    # Soft skills (sur 2)
+    score_env_interculturel = ifelse(env_interculturel == "yes", 1, 0),
+    score_motivation = ifelse(motivation_recherche == "yes", 1, 0),
+
+    # Total des scores(sur 20)
+     score_total = round(score_diplome + score_exp_meal + score_exp_recherche + score_skills + score_analyse + score_redaction + score_language + score_env_interculturel + score_motivation)
+  )
+
+candidat_femme<-candidats%>%filter(gender=="female")
+candidat_homme<-candidats%>%filter(gender=="male")
+
+```
+
+## Générer une shortlist
+
+Appliquer un seuil de score pour filtrer les meilleurs candidats :
+
+```{r echo=FALSE}
+seuil<-12
+print(paste("Le seuil fixé est de", seuil,"sur 20"))
+```
+### Générer une shortlist ensemble
+
+```{r shortlist, echo=FALSE}
+shortlist <- candidats %>%
+  filter(score_total >=seuil) %>%  #
+  arrange(desc(score_total))%>%
+  select(id,name,gender,score_total,email,tel)
+
+nb_shortlist<-nrow(shortlist)
+
+nb_total<-nrow(candidats)
+
+shortlist %>%
+  kbl(caption = "Tableau des candidats shortlistés") %>%  # Ajout d'une légende
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+     full_width = F 
+  ) %>%
+  scroll_box(width = "100%", height = "300px")
+
+print(paste("Au total, ",nb_shortlist,"candidats sont retenus sur ", nb_total, "postulants avec le seuil fixé de ", seuil,"sur 20 points"))
+```
+
+### Générer une shortlist femme
+
+```{r shortlist_female, echo=FALSE}
+shortlist_female <- candidats %>%
+  filter(gender=="female", score_total >= seuil) %>%  #
+  arrange(desc(score_total))%>%
+  select(id,name,score_total,email,tel)
+
+nb_shortlist<-nrow(shortlist_female)
+
+nb_total<-candidats%>%filter(gender=="female")%>%nrow()
+
+shortlist_female %>%
+  kbl(caption = "Tableau des candidats shortlistés") %>%  # Ajout d'une légende
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = F
+  )%>%
+  scroll_box(width = "100%", height = "300px")
+
+print(paste("Au total, ",nb_shortlist,"candidates sont retenues"))
+```
+
+### Générer une shortlist homme
+
+```{r shortlist_male, echo=FALSE}
+shortlist_male <- candidats %>%
+  filter(gender=="male", score_total >= seuil) %>%  #
+  arrange(desc(score_total))%>%
+  select(id,name,score_total,email,tel)
+
+nb_shortlist<-nrow(shortlist_male)
+
+nb_total<-candidats%>%filter(gender=="male")%>%nrow()
+
+shortlist_male %>%
+  kbl(caption = "Tableau des candidats shortlistés") %>%  # Ajout d'une légende
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = F
+  )%>%
+  scroll_box(width = "100%", height = "300px")
+
+print(paste("Au total, ",nb_shortlist,"candidats sont retenus sur ", nb_total, "postulants avec le seuil fixé de ", seuil,"sur 20 points"))
+
+```
+## Distribution des scores
+
+```{r plot_scores, echo=FALSE, warning=FALSE}
+p1<-ggplot(candidats, aes(x = score_total)) +
+  geom_histogram(binwidth = 2, fill = "green", color = "black") +
+  labs(
+    x = "Score ensemble",
+    y = "Nombre de candidats"
+  )
+
+```
+
+```{r plot_scores_femme, echo=FALSE, warning=FALSE}
+
+p2<-ggplot(candidat_femme, aes(x = score_total)) +
+  geom_histogram(binwidth = 2, fill ="pink", color = "black") +
+  labs(
+    x = "Score Femme",
+    y = "Nombre de candidates"
+  )
+
+```
+
+```{r plot_scores_homme, echo=FALSE, warning=FALSE}
+
+p3<-ggplot(candidat_homme, aes(x = score_total)) +
+  geom_histogram(binwidth = 2, fill = "blue", color = "black") +
+  labs(
+    x = "Score Homme",
+    y = "Nombre de candidats"
+  )
+
+```
+
+
+```{r , echo=FALSE, warning=FALSE}
+subplot(
+  ggplotly(p1), 
+  ggplotly(p2), 
+  ggplotly(p3),
+  nrows = 1,
+  shareX = TRUE,
+  shareY = TRUE   
+)
+```
+
+## Exporter la base et les shortlists
+
+La base et les shortlists sont enregistrés dans les fichiers Excel suivants (cliquez sur les liens pour les ouvrir) :  
+
+- [Télécharger la base complète des candidats](./output/candidats.xlsx)  
+- [Télécharger la shortlist complète](./output/shortlist_candidats.xlsx)  
+- [Télécharger la shortlist des candidates (femmes)](./output/shortlist_candidats_femme.xlsx )
+- [Télécharger la shortlist des candidats (hommes)](./output/shortlist_candidats_homme.xlsx)
+
+```{r export,echo=FALSE }
+
+write_xlsx(candidats, paste0(path,"/output/candidats.xlsx"))
+write_xlsx(shortlist, paste0(path,"/output/shortlist_candidats.xlsx"))
+write_xlsx(shortlist_female, paste0(path,"/output/shortlist_candidats_femme.xlsx"))
+write_xlsx(shortlist_male, paste0(path,"/output/shortlist_candidats_homme.xlsx"))
+```

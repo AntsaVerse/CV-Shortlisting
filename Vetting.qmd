@@ -1,0 +1,233 @@
+---
+title: "TCHAD I PRESELECTION DES CANDIDATS POUR LE POSTE DE DATA OFFICER"
+format:
+  pdf:
+    number-sections: true
+    colorlinks: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(plotly)
+library(readxl)
+library(writexl)
+library(kableExtra)
+```
+
+
+
+```{r load_data, echo=FALSE}
+candidats <- read_excel("TCD_DO_VETTING.xlsx")
+
+nb_candidats <- nrow(candidats)
+
+cat("Au total,", nb_candidats, "candidatures ont été reçues pour le poste de Data Officer (DO).\n")
+```
+
+## Méthodologie de la préselection des candidats pour le test
+
+Chaque candidat est évalué sur un score total maximal de **10 points**, répartis entre critères académiques, expérience professionnelle, compétences techniques et aptitudes complémentaires.
+
+### Domaine du diplôme (maximum : 2 points)
+
+Le domaine de formation constitue un critère central d’évaluation, en fonction de sa pertinence pour le poste.
+
+- **Statistique** : 2 points  
+- **Informatique** : 1,5 point  
+- **Mathématiques** : 1 point  
+- **Économie** : 0,75 point  
+- **Autres domaines** : 0,5 point  
+
+Cette pondération reflète l’adéquation entre la spécialisation académique et les exigences techniques du poste.
+
+### Niveau d’éducation (maximum : 1 point)
+
+Le niveau académique est valorisé :
+
+- **Licence / Licence professionnelle** : 0,5 point  
+- **Master** : 0,75 point  
+- **Doctorat (PhD)** : 1 point  
+
+### Expérience professionnelle pertinente (maximum : 2 points)
+
+Deux dimensions d’expérience sont prises en compte :
+
+- Expérience en **MEAL** : 1 point  
+- Expérience en **gestion et analyse de données** : 1 point  
+
+### Compétences techniques (maximum : 3 points)
+
+Les compétences logicielles sont évaluées de manière cumulative.  
+Chaque compétence maîtrisée parmi les suivantes apporte **0,5 point** :
+
+- R  
+- Autres logiciels statistiques  
+- Excel  
+- Kobo  
+- Power BI  
+- SIG  
+
+Le score maximal pour cette section est à **3 points**.  
+
+### Compétences linguistiques (maximum : 1 point)
+
+Les compétences linguistiques sont évaluées de manière équilibrée :
+
+- Français : 0,5 point  
+- Anglais : 0,5 point  
+
+### Soft skills – Expérience en environnement interculturel (maximum : 1 point)
+
+Une expérience confirmée dans un environnement interculturel attribue **1 point**.  
+Ce critère vise à évaluer la capacité d’adaptation et de collaboration.
+
+## Calcul du score total
+
+Le score final correspond à la somme des points attribués pour chaque critère :
+$$
+Score\ total = Diplôme + Niveau + Expérience + Compétences\ techniques + Langues + Soft\ skills
+$$
+
+Le score maximal possible est de **10 points**.
+
+```{r scoring}
+candidats <- candidats %>%
+  mutate(
+    
+    # ---------------------------
+    # 1. Diplôme (max = 2)
+    # ---------------------------
+    score_diplome = case_when(
+      diplome == "stat"  ~ 2,
+      diplome == "info"  ~ 1.5,
+      diplome == "math"  ~ 1,
+      diplome == "eco"   ~ 0.75,
+      TRUE               ~ 0.5
+    ),
+
+    # ---------------------------
+    # 2. Niveau d'éducation (max = 1)
+    # ---------------------------
+    score_niveau = case_when(
+      niveau %in% c("licence", "licence_pro") ~ 0.5,
+      niveau == "master"                      ~ 0.75,
+      niveau == "phd"                         ~ 1,
+      TRUE                                    ~ 0
+    ),
+
+    # ---------------------------
+    # 3. Expérience (max = 2)
+    # ---------------------------
+    score_exp_meal = if_else(exp_meal == "yes", 1, 0),
+    score_exp_data = if_else(exp_data == "yes", 1, 0),
+
+    # ---------------------------
+    # 4. Compétences techniques (max = 3)
+    # ---------------------------
+    score_skills = rowSums(
+      select(., 
+             skills.r,
+             skills.other_stat_soft,
+             skills.excel,
+             skills.kobo,
+             skills.power_bi,
+             skills.sig) * 0.5,
+      na.rm = TRUE
+    ),
+
+    # ---------------------------
+    # 5. Langues (max = 1)
+    # ---------------------------
+    score_language = (language.french * 0.5) +
+                     (language.english * 0.5),
+
+    # ---------------------------
+    # 6. Soft skills (max = 1)
+    # ---------------------------
+    score_env_interculturel = if_else(env_interculturel == "yes", 1, 0),
+
+    # ---------------------------
+    # Score total
+    # ---------------------------
+    score_total = round(
+      score_diplome +
+      score_niveau +
+      score_exp_meal +
+      score_exp_data +
+      score_skills +
+      score_language +
+      score_env_interculturel,
+      2
+    )
+  )
+
+classement <- candidats %>%
+  arrange(desc(score_total)) %>%
+  mutate(Rang = row_number()) %>%
+  select(Rang, name, score_total)
+
+classement %>%
+  kbl(
+    caption = "Classement général des candidats par score total",
+    booktabs = TRUE,
+    align = "c"
+  ) %>%
+  kable_styling(
+    latex_options = c("striped", "hold_position"),
+    full_width = FALSE
+  )
+```
+
+
+## Distribution des scores
+
+```{r plot_scores, echo=FALSE, warning=FALSE}
+p1 <- ggplot(candidats, aes(x = score_total)) +
+  geom_histogram(binwidth = 0.5, fill = "#2C7FB8", color = "white") +
+  labs(
+    title = "Distribution des scores des candidats",
+    x = "Score total",
+    y = "Nombre de candidats"
+  ) +
+  theme_minimal()
+
+p1
+```
+
+
+## Générer une shortlist
+
+```{r echo=FALSE}
+seuil <- 6
+cat("Le seuil de présélection est fixé à", seuil, "points sur 10.\n")
+```
+
+```{r shortlist, echo=FALSE}
+shortlist_table <- candidats %>%
+  filter(score_total >= seuil) %>%
+  arrange(desc(score_total)) %>%
+  mutate(Rang = row_number()) %>%
+  select(id, name, email, tel)
+
+nb_shortlist <- nrow(shortlist_table)
+
+shortlist_table %>%
+  kbl(
+    caption = "Candidats présélectionnés (score ≥ seuil fixé)",
+    booktabs = TRUE,
+    longtable = TRUE,
+    align = "c"
+  ) %>%
+  kable_styling(
+    latex_options = c("striped", "hold_position"),
+    full_width = FALSE
+  )
+
+cat("\n",
+    nb_shortlist, "candidats sur", nb_candidats,
+    "ont atteint ou dépassé le seuil de",
+    seuil, "points.\n")
+```
